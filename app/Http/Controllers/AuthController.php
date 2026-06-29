@@ -28,6 +28,7 @@ class AuthController extends Controller
             'password_hash' => Hash::make($request->password),
             'role'          => 'user',
             'is_active'     => 1,
+            'avatar_url'    => null,
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -35,7 +36,15 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Success',
             'access_token' => $token,
-            'user' => $user
+            'user' => [
+                'user_id' => $user->user_id,
+                'username' => $user->username,
+                'email' => $user->email,
+                'role' => $user->role,
+                'avatar_url' => $user->avatar_url,
+                'facebook_id' => $user->facebook_id,
+                'google_id' => $user->google_id,
+            ]
         ], 201);
     }
 
@@ -50,13 +59,37 @@ class AuthController extends Controller
 
         return response()->json([
             'access_token' => $token,
-            'user' => $user
+            'user' => [
+                'user_id' => $user->user_id,
+                'username' => $user->username,
+                'email' => $user->email,
+                'role' => $user->role,
+                'avatar_url' => $user->avatar_url,
+                'facebook_id' => $user->facebook_id,
+                'google_id' => $user->google_id,
+            ]
         ]);
     }
 
     public function me(Request $request)
     {
         return response()->json(['user' => $request->user()]);
+    }
+
+    public function getProfile(Request $request)
+    {
+        $user = $request->user();
+        return response()->json([
+            'user' => [
+                'user_id' => $user->user_id,
+                'username' => $user->username,
+                'email' => $user->email,
+                'role' => $user->role,
+                'avatar_url' => $user->avatar_url,
+                'facebook_id' => $user->facebook_id,
+                'google_id' => $user->google_id,
+            ]
+        ]);
     }
 
     public function updateProfile(Request $request)
@@ -67,6 +100,7 @@ class AuthController extends Controller
             'username' => 'sometimes|required|string|max:50|unique:users,username,' . $user->user_id . ',user_id',
             'email' => 'sometimes|required|email|max:100|unique:users,email,' . $user->user_id . ',user_id',
             'preferred_currency' => 'sometimes|required|string|max:3|exists:currencies,currency_code',
+            'avatar_url' => 'sometimes|nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -82,10 +116,23 @@ class AuthController extends Controller
         if ($request->has('preferred_currency')) {
             $user->preferred_currency = $request->preferred_currency;
         }
+        if ($request->has('avatar_url')) {
+            $user->avatar_url = $request->avatar_url;
+        }
 
         $user->save();
 
-        return response()->json(['user' => $user]);
+        return response()->json([
+            'user' => [
+                'user_id' => $user->user_id,
+                'username' => $user->username,
+                'email' => $user->email,
+                'role' => $user->role,
+                'avatar_url' => $user->avatar_url,
+                'facebook_id' => $user->facebook_id,
+                'google_id' => $user->google_id,
+            ]
+        ]);
     }
 
     public function changePassword(Request $request)
@@ -128,20 +175,19 @@ class AuthController extends Controller
             $user = User::where('email', $googleUser->email)->first();
 
             if (!$user) {
-                // TẠO USERNAME ĐẸP: Lấy đúng tên từ Google
                 $rawName = $googleUser->getName();
                 $username = $rawName;
                 $counter = 1;
-                // Nếu trùng tên trong DB thì thêm số phía sau (Ví dụ: Nguyễn Vy 1)
                 while (User::where('username', $username)->exists()) {
                     $username = $rawName . ' ' . $counter;
                     $counter++;
                 }
 
                 $user = User::create([
-                    'username'      => $username, 
+                    'username'      => $username,
                     'email'         => $googleUser->email,
                     'google_id'     => $googleUser->id,
+                    'avatar_url'    => $googleUser->avatar,
                     'password_hash' => Hash::make(Str::random(16)),
                     'role'          => 'user',
                     'is_active'     => 1,
@@ -149,7 +195,13 @@ class AuthController extends Controller
                 ]);
             } else {
                 if (empty($user->google_id)) {
-                    $user->update(['google_id' => $googleUser->id]);
+                    $user->update([
+                        'google_id' => $googleUser->id,
+                        'avatar_url' => $googleUser->avatar ?? $user->avatar_url,
+                    ]);
+                }
+                if (empty($user->avatar_url) && $googleUser->avatar) {
+                    $user->update(['avatar_url' => $googleUser->avatar]);
                 }
             }
 
@@ -176,7 +228,6 @@ class AuthController extends Controller
                         ->first();
 
             if (!$user) {
-                // TẠO USERNAME ĐẸP: Lấy đúng tên từ Facebook
                 $rawName = $facebookUser->getName() ?: 'Facebook User';
                 $username = $rawName;
                 $counter = 1;
@@ -189,6 +240,7 @@ class AuthController extends Controller
                     'username'      => $username,
                     'email'         => $facebookUser->email,
                     'facebook_id'   => $facebookUser->id,
+                    'avatar_url'    => $facebookUser->avatar,
                     'password_hash' => Hash::make(Str::random(16)),
                     'role'          => 'user',
                     'is_active'     => 1,
@@ -196,7 +248,13 @@ class AuthController extends Controller
                 ]);
             } else {
                 if (empty($user->facebook_id)) {
-                    $user->update(['facebook_id' => $facebookUser->id]);
+                    $user->update([
+                        'facebook_id' => $facebookUser->id,
+                        'avatar_url' => $facebookUser->avatar ?? $user->avatar_url,
+                    ]);
+                }
+                if (empty($user->avatar_url) && $facebookUser->avatar) {
+                    $user->update(['avatar_url' => $facebookUser->avatar]);
                 }
             }
 
@@ -216,7 +274,10 @@ class AuthController extends Controller
             'user_id' => $user->user_id,
             'username' => $user->username,
             'email'    => $user->email,
-            'role'     => $user->role
+            'role'     => $user->role,
+            'avatar_url' => $user->avatar_url,
+            'facebook_id' => $user->facebook_id,
+            'google_id' => $user->google_id,
         ]));
 
         return redirect("http://localhost:3000/login-success?token={$token}&user={$userData}");

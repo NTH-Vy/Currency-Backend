@@ -15,6 +15,30 @@ use Illuminate\Support\Str;
 
 class AdminController extends Controller
 {
+    // Helper lấy avatar URL
+    private function getUserAvatarUrl($user)
+    {
+        // Nếu có avatar_url từ DB
+        if ($user->avatar_url) {
+            if (filter_var($user->avatar_url, FILTER_VALIDATE_URL)) {
+                return $user->avatar_url;
+            }
+            return asset('storage/' . $user->avatar_url);
+        }
+
+        // Nếu có facebook_id
+        if ($user->facebook_id) {
+            return "https://graph.facebook.com/{$user->facebook_id}/picture?type=large";
+        }
+
+        // Nếu có google_id
+        if ($user->google_id) {
+            return "https://lh3.googleusercontent.com/a/{$user->google_id}=s96-c";
+        }
+
+        return null;
+    }
+
     // Get all exchange rates with pagination (10 per page)
     public function getRates(Request $request)
     {
@@ -177,10 +201,10 @@ class AdminController extends Controller
         return response()->json(['success' => true]);
     }
 
-    // Get all users with pagination (10 per page)
+    // Get all users with pagination (10 per page) - CÓ AVATAR VÀ METHOD
     public function getUsers(Request $request)
     {
-        $query = User::select('user_id', 'username', 'email', 'role', 'is_active', 'created_at');
+        $query = User::select('user_id', 'username', 'email', 'role', 'is_active', 'created_at', 'avatar_url', 'facebook_id', 'google_id');
 
         // Search functionality
         if ($request->has('search') && !empty($request->search)) {
@@ -194,9 +218,33 @@ class AdminController extends Controller
         $users = $query->orderBy('created_at', 'desc')
             ->paginate(10);
 
+        // Transform data để thêm avatar URL và method
+        $usersData = collect($users->items())->map(function($user) {
+            // Xác định phương thức đăng nhập
+            $method = 'email'; // default
+            if ($user->google_id) {
+                $method = 'google';
+            } elseif ($user->facebook_id) {
+                $method = 'facebook';
+            }
+            
+            return [
+                'user_id' => $user->user_id,
+                'username' => $user->username,
+                'email' => $user->email,
+                'role' => $user->role,
+                'is_active' => $user->is_active,
+                'created_at' => $user->created_at,
+                'avatar_url' => $this->getUserAvatarUrl($user),
+                'facebook_id' => $user->facebook_id,
+                'google_id' => $user->google_id,
+                'login_method' => $method,
+            ];
+        });
+
         return response()->json([
             'success' => true,
-            'data' => $users->items(),
+            'data' => $usersData,
             'pagination' => [
                 'current_page' => $users->currentPage(),
                 'last_page' => $users->lastPage(),

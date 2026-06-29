@@ -61,7 +61,12 @@ class SupportTicketController extends Controller
     // Admin endpoint - get all tickets
     public function index(Request $request)
     {
-        $query = SupportTicket::with(['user', 'admin']);
+        $query = SupportTicket::with([
+            'user' => function($q) {
+                $q->select('user_id', 'username', 'email', 'avatar_url', 'facebook_id', 'google_id');
+            }, 
+            'admin'
+        ]);
 
         // Filter by status
         if ($request->has('status') && $request->status !== 'all') {
@@ -95,7 +100,12 @@ class SupportTicketController extends Controller
     // Admin endpoint - get single ticket
     public function show($ticketId)
     {
-        $ticket = SupportTicket::with(['user', 'admin'])->findOrFail($ticketId);
+        $ticket = SupportTicket::with([
+            'user' => function($q) {
+                $q->select('user_id', 'username', 'email', 'avatar_url', 'facebook_id', 'google_id');
+            }, 
+            'admin'
+        ])->select('support_tickets.*')->findOrFail($ticketId);
 
         return response()->json([
             'success' => true,
@@ -138,7 +148,9 @@ class SupportTicketController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Response submitted successfully',
-            'ticket' => $ticket->load(['user', 'admin'])
+            'ticket' => $ticket->load(['user' => function($q) {
+                $q->select('user_id', 'username', 'email', 'avatar_url', 'facebook_id', 'google_id');
+            }, 'admin'])
         ]);
     }
 

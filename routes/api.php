@@ -73,10 +73,15 @@ Route::middleware('maintenance')->group(function () {
 // Protected Routes (Yêu cầu Token)
 Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
     Route::get('/user', [AuthController::class, 'me']);
+    Route::get('/user/profile', [AuthController::class, 'getProfile']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::put('/user/profile', [AuthController::class, 'updateProfile']);
     Route::post('/user/change-password', [AuthController::class, 'changePassword']);
     Route::get('/user/ban-status', [ReportController::class, 'checkBanStatus']);
+
+    // Avatar upload
+    Route::post('/user/avatar', [UploadController::class, 'uploadAvatar']);
+    Route::delete('/user/avatar', [UploadController::class, 'deleteAvatar']);
 
     // Report comment (requires authentication)
     Route::post('/comments/{commentId}/report', [ReportController::class, 'store']);
