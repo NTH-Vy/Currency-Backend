@@ -35,4 +35,22 @@ class Notification extends Model
     public function comment() {
         return $this->belongsTo(Comment::class, 'comment_id', 'comment_id');
     }
+
+    // Scope for unread notifications
+    public function scopeUnread($query)
+    {
+        return $query->where('is_read', 0);
+    }
+
+    // Scope for read notifications
+    public function scopeRead($query)
+    {
+        return $query->where('is_read', 1);
+    }
+
+    // Get notification type label
+    public function getTypeLabelAttribute()
+    {
+        return self::TYPES[$this->type] ?? $this->type;
+    }
 }

@@ -20,11 +20,18 @@ class NotificationController extends Controller
                 ->limit(20)
                 ->get()
                 ->map(function ($notification) {
+                    // Lấy thông tin actor nếu có
+                    $actorUsername = $notification->actor_username;
+                    if (!$actorUsername && $notification->actor_id) {
+                        $actor = User::find($notification->actor_id);
+                        $actorUsername = $actor ? $actor->username : 'Unknown';
+                    }
+                    
                     return [
                         'notification_id' => $notification->notification_id,
                         'type' => $notification->type,
                         'actor_id' => $notification->actor_id,
-                        'actor_username' => $notification->actor_username ?? 'Unknown',
+                        'actor_username' => $actorUsername ?? 'Unknown',
                         'post_id' => $notification->post_id,
                         'comment_id' => $notification->comment_id,
                         'comment_content' => $notification->comment_content,

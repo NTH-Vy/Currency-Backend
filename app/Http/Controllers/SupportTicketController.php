@@ -45,7 +45,7 @@ class SupportTicketController extends Controller
                 'actor_username' => $request->name,
                 'post_id' => $ticket->ticket_id,
                 'comment_id' => null,
-                'comment_content' => "New support ticket from {$request->name}: " . ($request->subject ?: 'Infrastructure Request'),
+                'comment_content' => "New support ticket #{$ticket->ticket_id} from {$request->name}: " . ($request->subject ?: 'Infrastructure Request'),
                 'is_read' => 0,
                 'created_at' => now(),
             ]);
@@ -105,7 +105,7 @@ class SupportTicketController extends Controller
                 $q->select('user_id', 'username', 'email', 'avatar_url', 'facebook_id', 'google_id');
             }, 
             'admin'
-        ])->select('support_tickets.*')->findOrFail($ticketId);
+        ])->findOrFail($ticketId);
 
         return response()->json([
             'success' => true,
@@ -122,11 +122,12 @@ class SupportTicketController extends Controller
         ]);
 
         $ticket = SupportTicket::findOrFail($ticketId);
+        $admin = Auth::user();
 
         $ticket->update([
             'admin_response' => $request->response,
             'status' => $request->status,
-            'admin_id' => Auth::id(),
+            'admin_id' => $admin->user_id,
             'responded_at' => now(),
         ]);
 
@@ -135,11 +136,29 @@ class SupportTicketController extends Controller
             Notification::create([
                 'user_id' => $ticket->user_id,
                 'type' => 'reply',
-                'actor_id' => Auth::id(),
-                'actor_username' => Auth::user()->username,
+                'actor_id' => $admin->user_id,
+                'actor_username' => $admin->username,
                 'post_id' => null,
                 'comment_id' => null,
-                'comment_content' => 'Admin has responded to your support ticket #' . $ticket->ticket_id,
+                'comment_content' => "Admin @{$admin->username} has responded to your support ticket #{$ticket->ticket_id}",
+                'is_read' => 0,
+                'created_at' => now(),
+            ]);
+        }
+
+        // Also create notification for all admins about the response
+        $admins = User::where('role', 'admin')->orWhere('role', 'ADMIN')
+            ->where('user_id', '!=', $admin->user_id)
+            ->get();
+        foreach ($admins as $adminUser) {
+            Notification::create([
+                'user_id' => $adminUser->user_id,
+                'type' => 'reply',
+                'actor_id' => $admin->user_id,
+                'actor_username' => $admin->username,
+                'post_id' => $ticket->ticket_id,
+                'comment_id' => null,
+                'comment_content' => "Admin @{$admin->username} responded to ticket #{$ticket->ticket_id}",
                 'is_read' => 0,
                 'created_at' => now(),
             ]);
@@ -169,6 +188,21 @@ class SupportTicketController extends Controller
             'priority' => $request->priority ?? $ticket->priority,
         ]);
 
+        // Notify user about status change if they have an account
+        if ($ticket->user_id) {
+            Notification::create([
+                'user_id' => $ticket->user_id,
+                'type' => 'reply',
+                'actor_id' => Auth::id(),
+                'actor_username' => Auth::user()->username,
+                'post_id' => null,
+                'comment_id' => null,
+                'comment_content' => "Your support ticket #{$ticket->ticket_id} status has been updated to: " . strtoupper($request->status),
+                'is_read' => 0,
+                'created_at' => now(),
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Ticket updated successfully',
@@ -180,6 +214,22 @@ class SupportTicketController extends Controller
     public function destroy($ticketId)
     {
         $ticket = SupportTicket::findOrFail($ticketId);
+        
+        // Notify user if they have an account
+        if ($ticket->user_id) {
+            Notification::create([
+                'user_id' => $ticket->user_id,
+                'type' => 'reply',
+                'actor_id' => Auth::id(),
+                'actor_username' => Auth::user()->username,
+                'post_id' => null,
+                'comment_id' => null,
+                'comment_content' => "Your support ticket #{$ticket->ticket_id} has been closed and deleted.",
+                'is_read' => 0,
+                'created_at' => now(),
+            ]);
+        }
+
         $ticket->delete();
 
         return response()->json([
