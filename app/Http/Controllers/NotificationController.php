@@ -22,9 +22,18 @@ class NotificationController extends Controller
                 ->map(function ($notification) {
                     // Lấy thông tin actor nếu có
                     $actorUsername = $notification->actor_username;
-                    if (!$actorUsername && $notification->actor_id) {
+                    $actorAvatar = null;
+                    $actorFacebookId = null;
+                    $actorGoogleId = null;
+                    
+                    if ($notification->actor_id) {
                         $actor = User::find($notification->actor_id);
-                        $actorUsername = $actor ? $actor->username : 'Unknown';
+                        if ($actor) {
+                            $actorUsername = $actor->username;
+                            $actorAvatar = $actor->avatar_url;
+                            $actorFacebookId = $actor->facebook_id;
+                            $actorGoogleId = $actor->google_id;
+                        }
                     }
                     
                     return [
@@ -32,6 +41,9 @@ class NotificationController extends Controller
                         'type' => $notification->type,
                         'actor_id' => $notification->actor_id,
                         'actor_username' => $actorUsername ?? 'Unknown',
+                        'actor_avatar' => $actorAvatar,
+                        'actor_facebook_id' => $actorFacebookId,
+                        'actor_google_id' => $actorGoogleId,
                         'post_id' => $notification->post_id,
                         'comment_id' => $notification->comment_id,
                         'comment_content' => $notification->comment_content,

@@ -58,7 +58,10 @@ class SupportTicketController extends Controller
         ], 201);
     }
 
-    // Admin endpoint - get all tickets
+    /**
+     * ⭐ Admin endpoint - get all tickets with pagination
+     * Supports: per_page (default 10), page, status, priority, search
+     */
     public function index(Request $request)
     {
         $query = SupportTicket::with([
@@ -78,8 +81,16 @@ class SupportTicketController extends Controller
             $query->where('priority', $request->priority);
         }
 
+        // Filter by date range
+        if ($request->has('date_from') && !empty($request->date_from)) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->has('date_to') && !empty($request->date_to)) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
         // Search
-        if ($request->has('search')) {
+        if ($request->has('search') && !empty($request->search)) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -89,7 +100,15 @@ class SupportTicketController extends Controller
             });
         }
 
-        $tickets = $query->orderBy('created_at', 'desc')->paginate(20);
+        // ⭐ Get per_page from request, default 10
+        $perPage = $request->input('per_page', 10);
+        
+        // ⭐ Limit max per_page to 100 to prevent abuse
+        if ($perPage > 100) {
+            $perPage = 100;
+        }
+
+        $tickets = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json([
             'success' => true,
@@ -113,11 +132,13 @@ class SupportTicketController extends Controller
         ]);
     }
 
-    // Admin endpoint - respond to ticket
+    /**
+     * ⭐ Admin endpoint - respond to ticket với notification cải tiến
+     */
     public function respond(Request $request, $ticketId)
     {
         $request->validate([
-            'response' => 'required|string',
+            'response' => 'required|string|min:1|max:5000',
             'status' => 'required|in:open,in_progress,resolved,closed',
         ]);
 
@@ -131,22 +152,32 @@ class SupportTicketController extends Controller
             'responded_at' => now(),
         ]);
 
-        // Create notification for the user if they have an account
-        if ($ticket->user_id) {
+        // ⭐ Tạo thông báo cho người dùng với nội dung chi tiết
+        $userId = $ticket->user_id;
+        
+        // Nếu không có user_id, thử tìm user bằng email
+        if (!$userId && $ticket->email) {
+            $user = User::where('email', $ticket->email)->first();
+            if ($user) {
+                $userId = $user->user_id;
+            }
+        }
+        
+        if ($userId) {
             Notification::create([
-                'user_id' => $ticket->user_id,
+                'user_id' => $userId,
                 'type' => 'reply',
                 'actor_id' => $admin->user_id,
                 'actor_username' => $admin->username,
-                'post_id' => null,
+                'post_id' => $ticket->ticket_id, // ⭐ Lưu ticket_id để user click vào
                 'comment_id' => null,
-                'comment_content' => "Admin @{$admin->username} has responded to your support ticket #{$ticket->ticket_id}",
+                'comment_content' => $request->response, // ⭐ Lưu nội dung phản hồi
                 'is_read' => 0,
                 'created_at' => now(),
             ]);
         }
 
-        // Also create notification for all admins about the response
+        // Tạo thông báo cho các admin khác
         $admins = User::where('role', 'admin')->orWhere('role', 'ADMIN')
             ->where('user_id', '!=', $admin->user_id)
             ->get();
@@ -182,6 +213,7 @@ class SupportTicketController extends Controller
         ]);
 
         $ticket = SupportTicket::findOrFail($ticketId);
+        $admin = Auth::user();
 
         $ticket->update([
             'status' => $request->status,
@@ -190,14 +222,21 @@ class SupportTicketController extends Controller
 
         // Notify user about status change if they have an account
         if ($ticket->user_id) {
+            $statusLabels = [
+                'open' => 'Đang mở',
+                'in_progress' => 'Đang xử lý',
+                'resolved' => 'Đã giải quyết',
+                'closed' => 'Đã đóng'
+            ];
+            
             Notification::create([
                 'user_id' => $ticket->user_id,
                 'type' => 'reply',
-                'actor_id' => Auth::id(),
-                'actor_username' => Auth::user()->username,
-                'post_id' => null,
+                'actor_id' => $admin->user_id,
+                'actor_username' => $admin->username,
+                'post_id' => $ticket->ticket_id,
                 'comment_id' => null,
-                'comment_content' => "Your support ticket #{$ticket->ticket_id} status has been updated to: " . strtoupper($request->status),
+                'comment_content' => "Ticket #{$ticket->ticket_id} đã chuyển sang trạng thái: " . ($statusLabels[$request->status] ?? $request->status),
                 'is_read' => 0,
                 'created_at' => now(),
             ]);
@@ -214,17 +253,18 @@ class SupportTicketController extends Controller
     public function destroy($ticketId)
     {
         $ticket = SupportTicket::findOrFail($ticketId);
+        $admin = Auth::user();
         
         // Notify user if they have an account
         if ($ticket->user_id) {
             Notification::create([
                 'user_id' => $ticket->user_id,
                 'type' => 'reply',
-                'actor_id' => Auth::id(),
-                'actor_username' => Auth::user()->username,
-                'post_id' => null,
+                'actor_id' => $admin->user_id,
+                'actor_username' => $admin->username,
+                'post_id' => $ticket->ticket_id,
                 'comment_id' => null,
-                'comment_content' => "Your support ticket #{$ticket->ticket_id} has been closed and deleted.",
+                'comment_content' => "Ticket #{$ticket->ticket_id} đã bị xóa bởi admin.",
                 'is_read' => 0,
                 'created_at' => now(),
             ]);

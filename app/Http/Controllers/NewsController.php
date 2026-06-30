@@ -6,6 +6,8 @@ use App\Models\News;
 use App\Models\Comment;
 use App\Models\Favorite;
 use App\Models\CommentLike;
+use App\Models\Notification;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class NewsController extends Controller
@@ -30,9 +32,9 @@ class NewsController extends Controller
             });
         }
 
-        // 3. Phân trang (Pagination) - Lấy 9 bài mỗi trang
+        // 3. Phân trang (Pagination) - Lấy 10 bài mỗi trang
         // Sắp xếp theo lượt xem giảm dần (tin hot lên đầu)
-        $paginated = $query->orderBy('views', 'desc')->paginate(9);
+        $paginated = $query->orderBy('views', 'desc')->paginate(10);
 
         return response()->json([
             'success' => true,
@@ -130,6 +132,45 @@ class NewsController extends Controller
             'rating' => $request->rating ?? 5,
             'parent_comment_id' => $request->parent_comment_id
         ]);
+
+        // Create notification for reply
+        if ($request->parent_comment_id) {
+            $parentComment = Comment::find($request->parent_comment_id);
+            if ($parentComment && $parentComment->user_id != $user->user_id) {
+                Notification::create([
+                    'user_id' => $parentComment->user_id,
+                    'type' => 'reply',
+                    'actor_id' => $user->user_id,
+                    'actor_username' => $user->username,
+                    'post_id' => $id,
+                    'comment_id' => $comment->comment_id,
+                    'comment_content' => substr($comment->content, 0, 100),
+                    'is_read' => 0,
+                    'created_at' => now(),
+                ]);
+            }
+        }
+
+        // Check for mentions in the comment content
+        preg_match_all('/@(\w+)/', $request->content, $matches);
+        if (!empty($matches[1])) {
+            foreach ($matches[1] as $username) {
+                $mentionedUser = User::where('username', $username)->first();
+                if ($mentionedUser && $mentionedUser->user_id != $user->user_id) {
+                    Notification::create([
+                        'user_id' => $mentionedUser->user_id,
+                        'type' => 'mention',
+                        'actor_id' => $user->user_id,
+                        'actor_username' => $user->username,
+                        'post_id' => $id,
+                        'comment_id' => $comment->comment_id,
+                        'comment_content' => substr($comment->content, 0, 100),
+                        'is_read' => 0,
+                        'created_at' => now(),
+                    ]);
+                }
+            }
+        }
 
         return response()->json([
             'message' => 'Success',
@@ -326,6 +367,21 @@ class NewsController extends Controller
         } else {
             CommentLike::create(['user_id' => $userId, 'comment_id' => $commentId]);
             $liked = true;
+
+            // Create notification for comment owner if not self-like
+            if ($comment->user_id != $userId) {
+                Notification::create([
+                    'user_id' => $comment->user_id,
+                    'type' => 'like',
+                    'actor_id' => $userId,
+                    'actor_username' => $user->username,
+                    'post_id' => $id,
+                    'comment_id' => $commentId,
+                    'comment_content' => substr($comment->content, 0, 100),
+                    'is_read' => 0,
+                    'created_at' => now(),
+                ]);
+            }
         }
 
         // Lấy số likes mới
