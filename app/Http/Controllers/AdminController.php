@@ -140,12 +140,32 @@ class AdminController extends Controller
             $query->where('category', $request->category);
         }
 
+        // Date range filter
+        if ($request->has('date_from') && !empty($request->date_from)) {
+            $query->whereDate('published_at', '>=', $request->date_from);
+        }
+        if ($request->has('date_to') && !empty($request->date_to)) {
+            $query->whereDate('published_at', '<=', $request->date_to);
+        }
+
+        $statsQuery = clone $query;
+        $categoryCounts = [
+            'Markets' => (clone $statsQuery)->where('category', 'Markets')->count(),
+            'Forex' => (clone $statsQuery)->where('category', 'Forex')->count(),
+            'Crypto' => (clone $statsQuery)->where('category', 'Crypto')->count(),
+            'Policy' => (clone $statsQuery)->where('category', 'Policy')->count(),
+        ];
+
         $news = $query->orderBy('published_at', 'desc')
             ->paginate(10);
 
         return response()->json([
             'success' => true,
             'data' => $news->items(),
+            'stats' => [
+                'total' => $news->total(),
+                'categories' => $categoryCounts,
+            ],
             'pagination' => [
                 'current_page' => $news->currentPage(),
                 'last_page' => $news->lastPage(),
@@ -215,6 +235,32 @@ class AdminController extends Controller
             });
         }
 
+        // Role filter
+        if ($request->has('role') && !empty($request->role) && $request->role !== 'All') {
+            $query->where('role', $request->role);
+        }
+
+        // Status filter (active/inactive)
+        if ($request->has('status') && !empty($request->status) && $request->status !== 'All') {
+            $query->where('is_active', $request->status === 'active' ? 1 : 0);
+        }
+
+        // Date range filter
+        if ($request->has('date_from') && !empty($request->date_from)) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->has('date_to') && !empty($request->date_to)) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        $statsQuery = clone $query;
+        $userStats = [
+            'total' => $statsQuery->count(),
+            'admins' => (clone $statsQuery)->where('role', 'admin')->count(),
+            'editors' => (clone $statsQuery)->where('role', 'editor')->count(),
+            'active' => (clone $statsQuery)->where('is_active', 1)->count(),
+        ];
+
         $users = $query->orderBy('created_at', 'desc')
             ->paginate(10);
 
@@ -233,7 +279,7 @@ class AdminController extends Controller
                 'username' => $user->username,
                 'email' => $user->email,
                 'role' => $user->role,
-                'is_active' => $user->is_active,
+                'is_active' => (bool) $user->is_active,
                 'created_at' => $user->created_at,
                 'avatar_url' => $this->getUserAvatarUrl($user),
                 'facebook_id' => $user->facebook_id,
@@ -245,6 +291,7 @@ class AdminController extends Controller
         return response()->json([
             'success' => true,
             'data' => $usersData,
+            'stats' => $userStats,
             'pagination' => [
                 'current_page' => $users->currentPage(),
                 'last_page' => $users->lastPage(),
@@ -375,6 +422,16 @@ class AdminController extends Controller
             $query->where('news_id', $request->news_id);
         }
 
+        $statsQuery = clone $query;
+        $commentStats = [
+            'total' => $statsQuery->count(),
+            'with_rating' => (clone $statsQuery)->whereNotNull('rating')->count(),
+            'reported' => (clone $statsQuery)->whereHas('reports', function($q) {
+                $q->where('status', 'pending');
+            })->count(),
+            'high_quality' => (clone $statsQuery)->where('rating', '>=', 4)->count(),
+        ];
+
         $comments = $query->orderBy('created_at', 'desc')
             ->paginate($request->per_page ?? 10);
 
@@ -408,6 +465,7 @@ class AdminController extends Controller
         return response()->json([
             'success' => true,
             'data' => $commentsData,
+            'stats' => $commentStats,
             'pagination' => [
                 'current_page' => $comments->currentPage(),
                 'last_page' => $comments->lastPage(),
@@ -684,6 +742,8 @@ class AdminController extends Controller
                     'target_id' => $log->target_id,
                     'description' => $log->description,
                     'created_at' => $log->created_at->format('Y-m-d H:i:s'),
+                    'avatar' => $log->user->username ? strtoupper(substr($log->user->username, 0, 1)) : 'A',
+                    'status' => 'success',
                 ];
             });
 
@@ -691,6 +751,55 @@ class AdminController extends Controller
             'success' => true,
             'data' => $logs
         ]);
+    }
+
+    // Log admin audit action
+    public function logAuditAction(Request $request)
+    {
+        $request->validate([
+            'action' => 'required|string|max:100',
+            'details' => 'required|string|max:500',
+        ]);
+
+        try {
+            $user = $request->user();
+            
+            // Map action to activity type
+            $activityType = match($request->action) {
+                'publish_broadcast' => 'BROADCAST',
+                'factory_reset' => 'SYSTEM',
+                'oracle_override' => 'RATE_UPDATE',
+                'create_user' => 'USER_MANAGEMENT',
+                'update_user' => 'USER_MANAGEMENT',
+                'delete_user' => 'USER_MANAGEMENT',
+                'create_news' => 'CONTENT',
+                'update_news' => 'CONTENT',
+                'delete_news' => 'CONTENT',
+                'create_rate' => 'RATE_UPDATE',
+                'update_rate' => 'RATE_UPDATE',
+                'delete_rate' => 'RATE_UPDATE',
+                default => 'ADMIN',
+            };
+
+            ActivityLog::create([
+                'user_id' => $user->user_id,
+                'activity_type' => $activityType,
+                'target_type' => 'admin',
+                'target_id' => (string) $user->user_id,
+                'description' => $request->details,
+                'created_at' => now(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Audit log recorded successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to record audit log: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     // Get dashboard statistics

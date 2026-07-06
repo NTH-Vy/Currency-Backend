@@ -10,7 +10,7 @@ class News extends Model
     protected $primaryKey = 'news_id';
     public $timestamps = false; // database của bạn dùng published_at thay vì created_at/updated_at
 
-    protected $fillable = ['title', 'content', 'image_url', 'author_id'];
+    protected $fillable = ['title', 'content', 'image_url', 'author_id', 'category', 'published_at'];
 
     // Liên kết với User (Tác giả)
     public function author() {

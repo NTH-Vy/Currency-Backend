@@ -103,9 +103,45 @@ class ReportController extends Controller
             $query->where('reason', $request->reason);
         }
 
+        // Search by reporter, comment content, or description
+        if ($request->has('search') && !empty($request->search)) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('description', 'like', "%{$search}%")
+                  ->orWhere('admin_note', 'like', "%{$search}%")
+                  ->orWhereHas('reporter', function ($rq) use ($search) {
+                      $rq->where('username', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('comment', function ($cq) use ($search) {
+                      $cq->where('content', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        // Date range filter
+        if ($request->has('date_from') && !empty($request->date_from)) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->has('date_to') && !empty($request->date_to)) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
         $reports = $query->orderBy('created_at', 'desc')->paginate(20);
 
-        return response()->json($reports);
+        // Build stats based on the same filtered query (global counts for current filters)
+        $statsQuery = clone $query;
+        $stats = [
+            'total_reports' => $statsQuery->count(),
+            'pending_reports' => (clone $statsQuery)->where('status', 'pending')->count(),
+            'approved_reports' => (clone $statsQuery)->where('status', 'approved')->count(),
+            'rejected_reports' => (clone $statsQuery)->where('status', 'rejected')->count(),
+        ];
+
+        $arr = $reports->toArray();
+        $arr['stats'] = $stats;
+
+        return response()->json($arr);
     }
 
     /**

@@ -207,7 +207,7 @@ class AuthController extends Controller
 
             return $this->sendSuccessResponse($user);
         } catch (\Exception $e) {
-            return redirect("http://localhost:3000/login?error=google_failed");
+            return redirect("https://nhvy.vercel.app/");
         }
     }
 

@@ -15,42 +15,58 @@ class NotificationController extends Controller
     public function index()
     {
         try {
-            $notifications = Notification::where('user_id', Auth::id())
+            $notifications = Notification::with('actor')
+                ->where('user_id', Auth::id())
                 ->orderBy('created_at', 'desc')
-                ->limit(20)
-                ->get()
-                ->map(function ($notification) {
-                    // Lấy thông tin actor nếu có
-                    $actorUsername = $notification->actor_username;
-                    $actorAvatar = null;
-                    $actorFacebookId = null;
-                    $actorGoogleId = null;
-                    
-                    if ($notification->actor_id) {
-                        $actor = User::find($notification->actor_id);
-                        if ($actor) {
-                            $actorUsername = $actor->username;
-                            $actorAvatar = $actor->avatar_url;
-                            $actorFacebookId = $actor->facebook_id;
-                            $actorGoogleId = $actor->google_id;
-                        }
-                    }
-                    
-                    return [
-                        'notification_id' => $notification->notification_id,
-                        'type' => $notification->type,
-                        'actor_id' => $notification->actor_id,
-                        'actor_username' => $actorUsername ?? 'Unknown',
-                        'actor_avatar' => $actorAvatar,
-                        'actor_facebook_id' => $actorFacebookId,
-                        'actor_google_id' => $actorGoogleId,
-                        'post_id' => $notification->post_id,
-                        'comment_id' => $notification->comment_id,
-                        'comment_content' => $notification->comment_content,
-                        'is_read' => $notification->is_read,
-                        'created_at' => $notification->created_at,
-                    ];
-                });
+                ->limit(100)
+                ->get();
+
+            $grouped = $notifications->groupBy(function ($notification) {
+                if (in_array($notification->type, ['like', 'reply', 'mention']) && $notification->post_id) {
+                    return sprintf('%s|%s', $notification->type, $notification->post_id);
+                }
+
+                return sprintf('single|%s', $notification->notification_id);
+            });
+
+            $notifications = $grouped->map(function ($group) {
+                $latest = $group->sortByDesc('created_at')->first();
+                $actorUsername = $latest->actor_username;
+                $actorAvatar = null;
+                $actorFacebookId = null;
+                $actorGoogleId = null;
+
+                if ($latest->actor) {
+                    $actorUsername = $latest->actor->username ?? $actorUsername;
+                    $actorAvatar = $latest->actor->avatar_url;
+                    $actorFacebookId = $latest->actor->facebook_id;
+                    $actorGoogleId = $latest->actor->google_id;
+                }
+
+                $groupedCount = $group->count();
+                $groupedActorUsernames = $group->pluck('actor_username')->filter()->unique()->values()->all();
+                $groupedActorIds = $group->pluck('actor_id')->filter()->unique()->values()->all();
+                $isRead = $group->every(fn ($item) => $item->is_read == 1) ? 1 : 0;
+
+                return [
+                    'notification_id' => $latest->notification_id,
+                    'type' => $latest->type,
+                    'actor_id' => $latest->actor_id,
+                    'actor_username' => $actorUsername ?? 'Unknown',
+                    'actor_avatar' => $actorAvatar,
+                    'actor_facebook_id' => $actorFacebookId,
+                    'actor_google_id' => $actorGoogleId,
+                    'post_id' => $latest->post_id,
+                    'comment_id' => $latest->comment_id,
+                    'comment_content' => $latest->comment_content,
+                    'is_read' => $isRead,
+                    'created_at' => $latest->created_at,
+                    'grouped_count' => $groupedCount,
+                    'grouped_actor_usernames' => $groupedActorUsernames,
+                    'grouped_actor_ids' => $groupedActorIds,
+                    'grouped' => $groupedCount > 1,
+                ];
+            })->slice(0, 20)->values();
 
             return response()->json([
                 'success' => true,

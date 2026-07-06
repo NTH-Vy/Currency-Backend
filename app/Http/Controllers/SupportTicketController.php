@@ -110,9 +110,21 @@ class SupportTicketController extends Controller
 
         $tickets = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
+        // Compute stats using the same filtered query so stats reflect filters (global totals)
+        $statsQuery = clone $query;
+        $stats = [
+            'total' => $statsQuery->count(),
+            'open' => (clone $statsQuery)->where('status', 'open')->count(),
+            'in_progress' => (clone $statsQuery)->where('status', 'in_progress')->count(),
+            'resolved' => (clone $statsQuery)->where('status', 'resolved')->count(),
+            'closed' => (clone $statsQuery)->where('status', 'closed')->count(),
+            'high_priority' => (clone $statsQuery)->whereIn('priority', ['high', 'urgent'])->count(),
+        ];
+
         return response()->json([
             'success' => true,
-            'tickets' => $tickets
+            'tickets' => $tickets,
+            'stats' => $stats,
         ]);
     }
 

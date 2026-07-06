@@ -188,6 +188,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
     // Admin - Activity Logs
     Route::get('/admin/activity-logs', [AdminController::class, 'getActivityLogs']);
+    Route::post('/admin/audit-logs', [AdminController::class, 'logAuditAction']);
 
     // Admin - Dashboard Statistics
     Route::get('/admin/statistics', [AdminController::class, 'getStatistics']);
