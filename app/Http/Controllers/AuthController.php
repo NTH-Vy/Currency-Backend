@@ -207,7 +207,8 @@ class AuthController extends Controller
 
             return $this->sendSuccessResponse($user);
         } catch (\Exception $e) {
-            return redirect("https://nhvy.vercel.app/");
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+            return redirect("{$frontendUrl}/");
         }
     }
 
@@ -260,7 +261,8 @@ class AuthController extends Controller
 
             return $this->sendSuccessResponse($user);
         } catch (\Exception $e) {
-            return redirect("http://localhost:3000/login?error=facebook_failed");
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+            return redirect("{$frontendUrl}/login?error=facebook_failed");
         }
     }
 
@@ -280,7 +282,8 @@ class AuthController extends Controller
             'google_id' => $user->google_id,
         ]));
 
-        return redirect("http://localhost:3000/login-success?token={$token}&user={$userData}");
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+        return redirect("{$frontendUrl}/login-success?token={$token}&user={$userData}");
     }
 
     public function logout(Request $request)
