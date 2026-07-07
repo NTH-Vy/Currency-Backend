@@ -27,7 +27,7 @@ class CurrencyController extends Controller
         $from = $request->from;
         $to = $request->to;
         $amount = $request->amount;
-        $apiKey = env('EXCHANGE_RATE_API_KEY');
+        $apiKey = config('services.exchange_rate.api_key');
 
         // Luôn gọi API bên ngoài để lấy tỷ giá mới nhất
         try {
@@ -252,7 +252,7 @@ class CurrencyController extends Controller
 
         // If not enough data in database, generate additional data
         if ($history->count() < $expectedPoints) {
-            $apiKey = env('EXCHANGE_RATE_API_KEY');
+            $apiKey = config('services.exchange_rate.api_key');
             if ($apiKey && $apiKey !== 'your_exchange_rate_api_key_here') {
                 try {
                     $response = Http::get("https://v6.exchangerate-api.com/v6/{$apiKey}/pair/{$request->base}/{$request->target}");
@@ -700,7 +700,7 @@ class CurrencyController extends Controller
     // Thêm hàm refresh all rates
     public function refreshAllRates(Request $request)
     {
-        $apiKey = env('EXCHANGE_RATE_API_KEY');
+        $apiKey = config('services.exchange_rate.api_key');
         $popularPairs = [
             ['USD', 'VND'], ['EUR', 'VND'], ['USD', 'EUR'],
             ['GBP', 'USD'], ['USD', 'JPY'], ['EUR', 'USD']

@@ -36,7 +36,7 @@ class RateController extends Controller
             ]);
         }
 
-        $apiKey = env('EXCHANGE_RATE_API_KEY');
+        $apiKey = config('services.exchange_rate.api_key');
         $response = Http::get("https://v6.exchangerate-api.com/v6/{$apiKey}/pair/{$from}/{$to}/{$amount}");
 
         if ($response->successful()) {

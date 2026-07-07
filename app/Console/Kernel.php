@@ -9,7 +9,7 @@ class Kernel extends ConsoleKernel
 {
     protected function schedule(Schedule $schedule): void
     {
-        $interval = env('RATE_FETCH_INTERVAL', '5');
+        $interval = config('services.exchange_rate.fetch_interval', '5');
 
         $job = $schedule->command('rates:fetch')
             ->withoutOverlapping()

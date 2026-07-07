@@ -18,7 +18,7 @@ class AIController extends Controller
         $title = $request->title;
 
         // Check if OpenAI API key is configured
-        $apiKey = env('OPENAI_API_KEY');
+        $apiKey = config('services.openai.api_key');
 
         if (!$apiKey) {
             // Return mock summary if no API key is configured

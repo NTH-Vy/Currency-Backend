@@ -36,7 +36,7 @@ class FetchRealtimeRates extends Command
     public function __construct()
     {
         parent::__construct();
-        $this->apiKey = env('EXCHANGE_RATE_API_KEY');
+        $this->apiKey = config('services.exchange_rate.api_key');
     }
 
     public function handle()

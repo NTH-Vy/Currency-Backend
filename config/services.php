@@ -47,4 +47,15 @@ return [
     'redirect' => env('FACEBOOK_REDIRECT_URI'),
     ],
 
+    'exchange_rate' => [
+        'api_key' => env('EXCHANGE_RATE_API_KEY'),
+        'fixer_key' => env('FIXER_API_KEY'),
+        'coingecko_key' => env('COINGECKO_API_KEY'),
+        'fetch_interval' => env('RATE_FETCH_INTERVAL', '5'),
+    ],
+
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+    ],
+
 ];
