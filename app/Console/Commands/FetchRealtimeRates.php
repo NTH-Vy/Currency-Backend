@@ -154,31 +154,35 @@ class FetchRealtimeRates extends Command
                 ->where('recorded_at', '<', now()->subDays(7))
                 ->delete();
             
-            // Broadcast WebSocket events
-            try {
-                // Broadcast rate update
-                broadcast(new RateUpdated($from, $to, $newRate, $change24hPercent));
+            // Broadcast WebSocket events (skip on production if Reverb is not configured)
+            $reverbHost = config('reverb.servers.reverb.hostname', 'localhost');
+            $isReverbAvailable = $reverbHost !== 'localhost' || config('app.env') !== 'production';
 
-                // Calculate and broadcast market pulse data
-                $marketPulseData = [
-                    'volatility' => $exchangeRate->volatility ?? 'Medium',
-                    'priceChangePercent' => $change24hPercent,
-                    'dayLow' => $newRate * 0.995,
-                    'dayHigh' => $newRate * 1.005,
-                    'sentimentBuy' => 65,
-                    'sentimentSell' => 35,
-                    'liquidity' => 'Deep',
-                    'volume24h' => $exchangeRate->volume_24h ?? $this->estimateVolume($from, $to),
-                ];
-                broadcast(new MarketPulseUpdated($from, $to, $marketPulseData));
+            if ($isReverbAvailable) {
+                try {
+                    broadcast(new RateUpdated($from, $to, $newRate, $change24hPercent));
 
-                // Calculate and broadcast currency strength data (for base currency)
-                $strengthData = $this->calculateCurrencyStrength($from);
-                broadcast(new CurrencyStrengthUpdated($from, $strengthData));
+                    $marketPulseData = [
+                        'volatility' => $exchangeRate->volatility ?? 'Medium',
+                        'priceChangePercent' => $change24hPercent,
+                        'dayLow' => $newRate * 0.995,
+                        'dayHigh' => $newRate * 1.005,
+                        'sentimentBuy' => 65,
+                        'sentimentSell' => 35,
+                        'liquidity' => 'Deep',
+                        'volume24h' => $exchangeRate->volume_24h ?? $this->estimateVolume($from, $to),
+                    ];
+                    broadcast(new MarketPulseUpdated($from, $to, $marketPulseData));
 
-                $this->info("✓ {$from}/{$to}: {$newRate} (" . ($change24hPercent > 0 ? '+' : '') . round($change24hPercent, 4) . "%) - Broadcasted to WebSocket");
-            } catch (\Exception $e) {
-                $this->warn("Broadcast failed for {$from}/{$to}: " . $e->getMessage());
+                    $strengthData = $this->calculateCurrencyStrength($from);
+                    broadcast(new CurrencyStrengthUpdated($from, $strengthData));
+
+                    $this->info("✓ {$from}/{$to}: {$newRate} (" . ($change24hPercent > 0 ? '+' : '') . round($change24hPercent, 4) . "%) - Broadcasted");
+                } catch (\Exception $e) {
+                    $this->info("✓ {$from}/{$to}: {$newRate} (" . ($change24hPercent > 0 ? '+' : '') . round($change24hPercent, 4) . "%) - Saved (broadcast skipped)");
+                }
+            } else {
+                $this->info("✓ {$from}/{$to}: {$newRate} (" . ($change24hPercent > 0 ? '+' : '') . round($change24hPercent, 4) . "%) - Saved to DB");
             }
             
         } catch (\Exception $e) {
