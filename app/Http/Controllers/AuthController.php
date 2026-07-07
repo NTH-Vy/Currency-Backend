@@ -207,7 +207,7 @@ class AuthController extends Controller
 
             return $this->sendSuccessResponse($user);
         } catch (\Exception $e) {
-            $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+            $frontendUrl = config('app.frontend_url');
             return redirect("{$frontendUrl}/");
         }
     }
@@ -261,7 +261,7 @@ class AuthController extends Controller
 
             return $this->sendSuccessResponse($user);
         } catch (\Exception $e) {
-            $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+            $frontendUrl = config('app.frontend_url');
             return redirect("{$frontendUrl}/login?error=facebook_failed");
         }
     }
@@ -282,7 +282,7 @@ class AuthController extends Controller
             'google_id' => $user->google_id,
         ]));
 
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+        $frontendUrl = config('app.frontend_url');
         return redirect("{$frontendUrl}/login-success?token={$token}&user={$userData}");
     }
 
